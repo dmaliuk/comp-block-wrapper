@@ -5,6 +5,12 @@
 #include <exception>
 #include <unordered_map>
 #include <string>
+#include "meta.h"
+
+template <class T>
+struct boxed {
+  using type = T;
+};
 
 struct Trade
 {
@@ -12,11 +18,16 @@ struct Trade
   int size;
 };
 
+struct Context {};
+
 void Assert(bool cond)
 {
   if (!cond)
     throw std::exception{};
 }
+
+template <class Klass, class... Args>
+using step_test = decltype(std::declval<Klass&>().StepImpl(std::declval<Args&>()...), std::true_type{});
 
 template <class Indicator>
 class IndicatorWithInputsAndContext
@@ -32,6 +43,25 @@ public:
   Indicator& Instance()
   {
     return static_cast<Indicator&>(*this);
+  }
+
+  //template <class T>
+  constexpr static auto CanStepOnTrade()
+  {
+    return is_detected<step_test, int, Trade>{};
+  }
+
+  template <class... Args>
+  using can_step_on_trade = is_detected<step_test, Trade, Context*, Args...>;
+
+  // template <class... Args>
+  // constexpr auto CanStepOnTradeImpl(std::tuple<Args*...>) -> decltype(std::declval<Indicator&>().StepImpl(std::declval<Trade&>(), (Context*)nullptr, std::declval<Args&>()...), std::true_type{})
+  // {
+  //   return {};
+  // }
+
+  constexpr static std::false_type CanStepOnTradeImpl(...) {
+    return {};
   }
 
   template <class Context>
@@ -73,6 +103,10 @@ public:
   int* a;
   double* b;
   QuoteData* quoteData;
+
+  constexpr static auto InputTypes() {
+    return std::tuple<int*, double*, QuoteData*>{};
+  }
 
   inline auto AsTuple() const {
     return std::tie(a, b, quoteData);
@@ -148,7 +182,8 @@ public:
   }
 };
 
-struct Context {};
+static_assert(!MyIndicator::CanStepOnTrade(), "");
+static_assert(!MyIndicator::can_step_on_trade<int, double, QuoteData>::value, "");
 
 int main()
 {
