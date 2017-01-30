@@ -30,6 +30,15 @@ using detected_t = typename detail::detector<void, void, Op, Args...>::type;
 template <class Default, template<class...> class Op, class... Args>
 using detected_or = detail::detector<Default, void, Op, Args...>;
 
+struct Quote {
+  double price = 0.;
+  int size = 0;
+};
+
+struct BidAskPair {
+  Quote bid;
+  Quote ask;
+};
 
 // user data
 class QuoteData {
@@ -37,35 +46,38 @@ class QuoteData {
   QuoteData(int n):quotes(n){};
 
   decltype(auto) get(int i) const {
-    return quotes[i];
+    return quotes.at(i);
   }
 
   decltype(auto) get(int i) {
-    return quotes[i];
+    return quotes.at(i);
   }
 
   auto size() const { return quotes.size();}
 
  private:
-  std::vector<double> quotes;
+  std::vector<BidAskPair> quotes;
 };
 
 struct Trade
 {
   double price;
   int size;
+  int exch;
 };
 
 struct Bid
 {
   double price;
   int size;
+  int exch;
 };
 
 struct Ask
 {
   double price;
   int size;
+  int exch;
 };
 
 struct Context {};
