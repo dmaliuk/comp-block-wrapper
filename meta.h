@@ -29,3 +29,51 @@ using detected_t = typename detail::detector<void, void, Op, Args...>::type;
  
 template <class Default, template<class...> class Op, class... Args>
 using detected_or = detail::detector<Default, void, Op, Args...>;
+
+
+// user data
+class QuoteData {
+ public:
+  QuoteData(int n):quotes(n){};
+
+  decltype(auto) get(int i) const {
+    return quotes[i];
+  }
+
+  decltype(auto) get(int i) {
+    return quotes[i];
+  }
+
+  auto size() const { return quotes.size();}
+
+ private:
+  std::vector<double> quotes;
+};
+
+struct Trade
+{
+  double price;
+  int size;
+};
+
+struct Bid
+{
+  double price;
+  int size;
+};
+
+struct Ask
+{
+  double price;
+  int size;
+};
+
+struct Context {};
+
+void Assert(bool cond)
+{
+  if (!cond)
+    throw std::exception{};
+}
+
+template <class... Args> struct type_list{};

@@ -7,27 +7,14 @@
 #include <string>
 #include "meta.h"
 
-template <class T>
-struct boxed {
-  using type = T;
-};
+template <class Indicator, class... Args>
+using step_impl_test = decltype(std::declval<Indicator&>().StepImpl(std::declval<Args&>()...), std::true_type{});
 
-struct Trade
-{
-  double price;
-  int size;
-};
+template <class Indicator, class... Args>
+using update_impl_test = decltype(std::declval<Indicator&>().UpdateImpl(std::declval<Args&>()...), std::true_type{});
 
-struct Context {};
-
-void Assert(bool cond)
-{
-  if (!cond)
-    throw std::exception{};
-}
-
-template <class Klass, class... Args>
-using step_test = decltype(std::declval<Klass&>().StepImpl(std::declval<Args&>()...), std::true_type{});
+template <class Indicator, class... Args>
+using post_update_impl_test = decltype(std::declval<Indicator&>().PostUpdateImpl(std::declval<Args&>()...), std::true_type{});
 
 template <class Indicator>
 class IndicatorWithInputsAndContext
@@ -36,8 +23,18 @@ public:
   template <class Context, class Inputs>
   IndicatorWithInputsAndContext(Context const& ctx, Inputs const& inputNames)
   {
-    Instance().InitializeInputs(inputNames);
-    Instance().ValidateInputs();
+    Instance().ForEachInput([&inputNames, this](auto idx, auto name, auto& inputPtr) {
+        std::cout << "Initializing input " << name << std::endl;
+        auto it = inputNames.find(name);
+        std::cout << "found pointer " << it->second << std::endl;
+        Assert(it != inputNames.end());
+        inputPtr = static_cast<std::decay_t<decltype(inputPtr)>>(it->second);
+      });
+
+    // validate inputs
+    Instance().ForEachInput([](auto idx, auto name, auto& inputPtr) {
+        Assert(inputPtr);
+      });
   }
 
   Indicator& Instance()
@@ -45,27 +42,54 @@ public:
     return static_cast<Indicator&>(*this);
   }
 
-  //template <class T>
-  constexpr static auto CanStepOnTrade()
+  template <class Event>
+  constexpr static auto CanStepOn()
   {
-    return is_detected<step_test, int, Trade>{};
+    return CanStepOnImpl<Event>(Indicator::InputTypeList());
+  }
+
+  template <class Event, class... Args>
+  constexpr static auto CanStepOnImpl(type_list<Args...>)
+  {
+    return is_detected<step_impl_test, Indicator, Event, Context*, Args...>{};
+  }
+
+  constexpr static auto CanUpdate()
+  {
+    return CanUpdateImpl(Indicator::InputTypeList());
   }
 
   template <class... Args>
-  using can_step_on_trade = is_detected<step_test, Trade, Context*, Args...>;
-
-  // template <class... Args>
-  // constexpr auto CanStepOnTradeImpl(std::tuple<Args*...>) -> decltype(std::declval<Indicator&>().StepImpl(std::declval<Trade&>(), (Context*)nullptr, std::declval<Args&>()...), std::true_type{})
-  // {
-  //   return {};
-  // }
-
-  constexpr static std::false_type CanStepOnTradeImpl(...) {
-    return {};
+  constexpr static auto CanUpdateImpl(type_list<Args...>)
+  {
+    return is_detected<update_impl_test, Indicator, Context*, Args...>{};
   }
 
+  constexpr static auto CanPostUpdate()
+  {
+    return CanPostUpdateImpl(Indicator::InputTypeList());
+  }
+
+  template <class... Args>
+  constexpr static auto CanPostUpdateImpl(type_list<Args...>)
+  {
+    return is_detected<post_update_impl_test, Indicator, Context*, Args...>{};
+  }
+
+  // template <template <class...> class Tester, class... Args>
+  // constexpr static auto CanCall()
+  // {
+  //   return CanCallImpl<Tester, Args...>(Indicator::InputTypeList());
+  // }
+
+  // template <template <class...> class Tester, class... Args1, class... Args2>
+  // constexpr static auto CanCallImpl(type_list<Args2...>)
+  // {
+  //   return is_detected<Tester, Indicator, Args1..., Context*, Args2...>{};
+  // }
+
   template <class Context>
-  void Step(Trade const & e, Context const * c)
+  auto Step(Trade const & e, Context const * c) -> std::enable_if_t<IndicatorWithInputsAndContext::CanStepOn<Trade>()>
   {
     StepHelper(e, c, std::make_index_sequence<Indicator::NumInputs()>{});
   }
@@ -79,33 +103,17 @@ public:
   
 };
 
-class QuoteData {
- public:
-  QuoteData(int n):quotes(n){};
-
-  decltype(auto) get(int i) const {
-    return quotes[i];
-  }
-
-  decltype(auto) get(int i) {
-    return quotes[i];
-  }
-
-  auto size() const { return quotes.size();}
-
- private:
-  std::vector<double> quotes;
-};
-
 class MyIndicator : public IndicatorWithInputsAndContext<MyIndicator>
 {
-public:
+  // hidden by macros
+ private:
   int* a;
   double* b;
   QuoteData* quoteData;
 
-  constexpr static auto InputTypes() {
-    return std::tuple<int*, double*, QuoteData*>{};
+ public:
+  constexpr static auto InputTypeList() {
+    return type_list<int, double, QuoteData>{};
   }
 
   inline auto AsTuple() const {
@@ -115,9 +123,9 @@ public:
   template <class F>
   void ForEachInput(F&& f)
   {
-    f(0, a);
-    f(1, b);
-    f(2, quoteData);
+    f(0, "a", a);
+    f(1, "b", b);
+    f(2, "quoteData", quoteData);
   }
   
   constexpr static size_t NumInputs()
@@ -125,41 +133,7 @@ public:
     return 3;
   }
 
-  static char const* InputName(int i)
-  {
-    switch(i)
-    {
-      case 0:
-        return "a";
-      case 1:
-        return "b";
-      case 2:
-        return "quoteData";
-      default:
-        return nullptr;
-    }
-  }
-
-  template <class Inputs>
-  void InitializeInputs(Inputs const& inputNames)
-  {
-    ForEachInput([&inputNames, this](auto idx, auto& inputPtr) {
-        auto name = this->InputName(idx);
-        std::cout << "Initializing input " << name << std::endl;
-        auto it = inputNames.find(name);
-        std::cout << "found pointer " << it->second << std::endl;
-        Assert(it != inputNames.end());
-        inputPtr = static_cast<std::decay_t<decltype(inputPtr)>>(it->second);
-      });
-  }
-                
-  void ValidateInputs()
-  {
-    ForEachInput([](auto idx, auto& inputPtr) {
-        Assert(inputPtr);
-      });
-  }
-
+ public:
   using Base = IndicatorWithInputsAndContext<MyIndicator>;
   using Base::Step;
 
@@ -180,10 +154,36 @@ public:
     }
     std::cout << std::endl;
   }
+
+  template <class Context>
+  inline void StepImpl(Ask const& t, Context const* ctx, ...)
+  {
+    std::cout << "Stepping on Ask" << std::endl;
+  }
+
+  template <class Context>
+  inline void UpdateImpl(Context const* ctx, ...)
+  {
+    std::cout << "Updating..." << std::endl;
+  }
+
+  template <class Context>
+  void PostUpdateImpl(Context const* ctx, int a, double b, QuoteData const& qd)
+  {
+    std::cout << "Updating..." << std::endl;
+  }
 };
 
-static_assert(!MyIndicator::CanStepOnTrade(), "");
-static_assert(!MyIndicator::can_step_on_trade<int, double, QuoteData>::value, "");
+static_assert(MyIndicator::CanStepOn<Trade>(), "");
+static_assert(MyIndicator::CanStepOn<Ask>(), "");
+static_assert(!MyIndicator::CanStepOn<Bid>(), "");
+static_assert(MyIndicator::CanUpdate(), "");
+static_assert(MyIndicator::CanPostUpdate(), "");
+
+
+// static_assert(MyIndicator::CanCall<step_impl_test, Trade>(), "");
+// static_assert(!MyIndicator::CanCall<step_impl_test, Bid>(), "");
+// static_assert(MyIndicator::CanCall<step_impl_test, Ask>(), "");
 
 int main()
 {
@@ -199,7 +199,7 @@ int main()
   
   MyIndicator ind{ctx, inputs};
   //ind.InitializeInputs(inputs);
-  ind.ValidateInputs();
+  //ind.ValidateInputs();
   ind.Step(Trade{}, &ctx);
   qd.get(0) = 13.13;
   qd.get(2) = 33.22;
