@@ -106,15 +106,15 @@ public:
     StepHelper(e, c, std::make_index_sequence<Indicator::NumInputs()>{});
   }
 
-  template <class Context, size_t... I>
-  void StepHelper(Trade const & e, Context const * c, std::index_sequence<I...>)
+  template <class Event, class Context, size_t... I>
+  void StepHelper(Event const & e, Context const * c, std::index_sequence<I...>)
   {
     auto ptrs = Instance().AsTuple();
     Instance().StepImpl(e, c, *std::get<I>(ptrs)...);
   }
 
   template <class Context>
-  auto Update(Context const * c) -> std::enable_if_t<IndicatorWithInputsAndContext::CanUpdate()>
+  void Update(Context const * c)
   {
     UpdateHelper(c, std::make_index_sequence<Indicator::NumInputs()>{});
   }
@@ -127,7 +127,7 @@ public:
   }
 
   template <class Context>
-  auto PostUpdate(Context const * c) -> std::enable_if_t<IndicatorWithInputsAndContext::CanPostUpdate()>
+  void PostUpdate(Context const * c)
   {
     PostUpdateHelper(c, std::make_index_sequence<Indicator::NumInputs()>{});
   }

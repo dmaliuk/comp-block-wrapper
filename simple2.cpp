@@ -34,7 +34,7 @@ int main()
   }
 
   {
-    Trade trade{92., 200, 3};
+    Trade trade{92., 200, 2};
     ind.Step(trade, &ctx);
   }
 

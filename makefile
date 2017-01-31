@@ -7,6 +7,8 @@ $(info $(CPP))
 
 all: $(EXE_FILES)
 
+simple2.cpp: meta.h indicator.h
+
 %.o:%.cpp
 	$(CPP) $(CPP_FLAGS) $< -c
 	objdump -M intel -S $@ > obj.asm
