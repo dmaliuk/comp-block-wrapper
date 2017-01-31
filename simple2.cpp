@@ -38,6 +38,8 @@ int main()
     ind.Step(trade, &ctx);
   }
 
+  std::cout << "tradeAsk before update: " << ind.tradeAsk << std::endl;
+  std::cout << "tradeBid before update: " << ind.tradeBid << std::endl;
   ind.Update(&ctx);
 
   std::cout << "value: " << ind.output << std::endl;
